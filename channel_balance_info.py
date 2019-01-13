@@ -5,6 +5,7 @@ import os
 import json
 import pprint
 import json
+import sys
 
 from google.protobuf.json_format import MessageToJson
 from tabulate import tabulate
@@ -52,9 +53,9 @@ channel = grpc.secure_channel('localhost:10009', combined_creds)
 stub = lnrpc.LightningStub(channel)
 
 
-# -----------------
-# Let's make an RPC
-# -----------------
+# -----------------#
+# Channel Balances #
+# -----------------#
 
 all_channel_info = stub.ListChannels(ln.ListChannelsRequest())
 # print(all_channel_info)
@@ -105,13 +106,55 @@ remote_active_total = round((active_remote / total) * 100, 2)
 remote_inactive_per = round((inactive_remote / total_remote) * 100, 2)
 remote_inactive_total = round((inactive_remote / total) * 100, 2)
 
-table = [["Balance\nLocation", "Channel\nState", "\nsatoshis", "% of\nLocation", "% of total\nbalance"],
-         ['Local', 'active', "{:,}".format(active_local), local_active_per, local_active_total],
-         ['Local', 'inactive', "{:,}".format(inactive_local), local_inactive_per, local_inactive_total],
-         ['Remote', 'active', "{:,}".format(active_remote), remote_active_per, remote_active_total],
-         ['Remote', 'inactive', "{:,}".format(inactive_remote), remote_inactive_per, remote_inactive_total]]
-         
+# ---------------#
+# Wallet Balance #
+# ---------------#
 
-print(tabulate(table, headers="firstrow", tablefmt="grid"))
+wallet_info = stub.WalletBalance(ln.WalletBalanceRequest())
+# print(wallet_info)
+# print(type(all_channel_info))
 
+wallet_json = MessageToJson(wallet_info)
+wallet_dict = json.loads(wallet_json)
+
+wallet_confirmed = int(wallet_dict["confirmed_balance"])
+wallet_total = int(wallet_dict["total_balance"])
+wallet_confirmed_per = round((wallet_confirmed / wallet_total) * 100, 2)
+
+node_total = wallet_total + total
+
+local_active_node_per = round((active_local / node_total) * 100, 2)
+local_inactive_node_per = round((inactive_local / node_total) * 100, 2)
+remote_active_node_per = round((active_remote / node_total) * 100, 2)
+remote_inactive_node_per = round((inactive_remote / node_total) * 100, 2)
+wallet_confirmed_node_per = round((wallet_confirmed / node_total) * 100, 2)
+wallet_total_node_per = round((wallet_total / node_total) * 100, 2)
+
+table = [["\nBalance\nLocation", "\nChannel\nState", "\n\nsatoshis",
+          "\n(%)\nLocation", "(%)\nChannel\ntotal", "(%)\nNode\ntotal"],
+         ['Local channel', 'active', "{:,}".format(active_local),
+          local_active_per, local_active_total, local_active_node_per],
+         ['Local channel', 'inactive', "{:,}".format(inactive_local),
+          local_inactive_per, local_inactive_total, local_inactive_node_per],
+         ['Remote channel', 'active', "{:,}".format(active_remote),
+          remote_active_per, remote_active_total, remote_active_node_per],
+         ['Remote channel', 'inactive', "{:,}".format(inactive_remote),
+          remote_inactive_per, remote_inactive_total, remote_inactive_node_per],
+         ['Local Wallet', 'confirmed', "{:,}".format(wallet_confirmed),
+          wallet_confirmed_per, 0, 0],
+         ['Local Wallet', 'total', "{:,}".format(wallet_total), 100, 0,
+          wallet_total_node_per]]
+
+def main():
+    try:
+        if sys.argv[1] == "table":
+            print(tabulate(table, headers="firstrow", tablefmt="grid"))
+    except:
+        print('Please provide an argument')
+        return
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
 
